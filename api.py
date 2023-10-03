@@ -10,7 +10,7 @@ from datetime import date
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from optparse import OptionParser
 
-from scoring import get_score
+from scoring import get_interests, get_score
 
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
@@ -145,8 +145,10 @@ class GenderField(Field):
 
 class ClientIDsField(Field):
     def validate(self, value):
-        if not isinstance(value, list) or not all(isinstance(cid, int) for cid in value):
+        if not isinstance(value, list):
             raise ValueError(f"Client IDs should be a list type, not a {type(value)}")
+        if not all(isinstance(cid, int) for cid in value):
+            raise ValueError("Client IDs value should be a int type")
         if len(value) == 0:
             raise ValueError("List IDs can not be empty")
         return value
@@ -164,8 +166,6 @@ class BaseRequest(object):
         for field in self.fields:
             setattr(self, field, request.arguments.get(field))
 
-        self.context["has"] = [f for f in self.fields if getattr(self, f) is not None]
-
 
 class OnlineScoreRequest(BaseRequest):
     first_name = CharField(required=False, nullable=True)
@@ -177,6 +177,7 @@ class OnlineScoreRequest(BaseRequest):
 
     def __init__(self, request, ctx=None, store=None):
         super().__init__(request, ctx=ctx, store=store)
+        self.context["has"] = [f for f in self.fields if getattr(self, f) is not None]
         if (
             (self.phone is None or self.email is None)
             and (self.gender is None or self.birthday is None)
@@ -209,8 +210,15 @@ class ClientsInterestsRequest(BaseRequest):
     client_ids = ClientIDsField(required=True, nullable=False)
     date = DateField(required=False, nullable=True)
 
+    def __init__(self, request, ctx=None, store=None):
+        super().__init__(request, ctx=ctx, store=store)
+        if self.client_ids is None:
+            raise ValueError("client ID must be present")
+
     def do(self):
-        pass
+        res = {arg: get_interests(self.store, arg) for arg in self.client_ids}
+        self.context["nclients"] = len(res)
+        return res
 
 
 class MethodRequest:
@@ -256,7 +264,6 @@ def method_handler(request, ctx, store):
     if not req.is_authenticated():
         return ERRORS[FORBIDDEN], FORBIDDEN
 
-    # arguments = request["body"]["arguments"]
     try:
         method = request_router[req.method](req, ctx, store)
     except KeyError:

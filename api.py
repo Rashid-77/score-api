@@ -10,6 +10,8 @@ from datetime import date
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from optparse import OptionParser
 
+from scoring import get_score
+
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
 ADMIN_SALT = "42"
@@ -155,11 +157,14 @@ class BaseRequest(object):
         cls.fields = [k for k, v in cls.__dict__.items() if isinstance(v, Field)]
         return super(BaseRequest, cls).__new__(cls)
 
-    def __init__(self, arguments: dict, ctx=None, store=None):
+    def __init__(self, request: dict, ctx=None, store=None):
         self.context = ctx
         self.store = store
+        self.is_admin = request.is_admin
         for field in self.fields:
-            setattr(self, field, arguments.get(field))
+            setattr(self, field, request.arguments.get(field))
+
+        self.context["has"] = [f for f in self.fields if getattr(self, f) is not None]
 
 
 class OnlineScoreRequest(BaseRequest):
@@ -171,16 +176,33 @@ class OnlineScoreRequest(BaseRequest):
     gender = GenderField(required=False, nullable=True)
 
     def __init__(self, request, ctx=None, store=None):
-        super().__init__(request, ctx=None, store=None)
-        if self.phone is None or self.email is None:
-            raise ValueError("There is no phone number or email in arguments")
-        elif self.first_name is None or self.last_name is None:
-            raise ValueError("There is no first_name or last_name in arguments")
-        elif self.gender is None or self.birthday is None:
-            raise ValueError("There is no gender or birthday in arguments")
+        super().__init__(request, ctx=ctx, store=store)
+        if (
+            (self.phone is None or self.email is None)
+            and (self.gender is None or self.birthday is None)
+            and (self.first_name is None or self.last_name is None)
+        ):
+            raise ValueError(
+                """There is at least one pair "phone number or email",
+                             "first_name or last_name", "gender or birthday"
+                             must be present in arguments"""
+            )
 
     def do(self):
-        pass
+        if self.is_admin:
+            return {"score": 42}
+        else:
+            return {
+                "score": get_score(
+                    store="",
+                    phone=self.phone,
+                    email=self.email,
+                    birthday=self.birthday,
+                    gender=self.gender,
+                    first_name=self.first_name,
+                    last_name=self.last_name,
+                )
+            }
 
 
 class ClientsInterestsRequest(BaseRequest):
@@ -234,14 +256,14 @@ def method_handler(request, ctx, store):
     if not req.is_authenticated():
         return ERRORS[FORBIDDEN], FORBIDDEN
 
-    arguments = request["body"]["arguments"]
+    # arguments = request["body"]["arguments"]
     try:
-        method = request_router[req.method](arguments, ctx, store)
+        method = request_router[req.method](req, ctx, store)
     except KeyError:
-        return f"Method {request.method} not found", INVALID_REQUEST
+        return f"Method {req.method} not found", INVALID_REQUEST
     except ValueError as e:
         return str(e), INVALID_REQUEST
-    return method(), OK
+    return method.do(), OK
 
 
 class MainHTTPHandler(BaseHTTPRequestHandler):

@@ -30,10 +30,10 @@ class TestSuite(unittest.TestCase):
 
     def set_valid_auth(self, request):
         if request.get("login") == api.ADMIN_LOGIN:
-            request["token"] = hashlib.sha512(datetime.datetime.now().strftime("%Y%m%d%H") + api.ADMIN_SALT).hexdigest()
+            msg = datetime.datetime.now().strftime("%Y%m%d%H") + api.ADMIN_SALT
         else:
             msg = request.get("account", "") + request.get("login", "") + api.SALT
-            request["token"] = hashlib.sha512(msg.encode()).hexdigest()
+        request["token"] = hashlib.sha512(msg.encode()).hexdigest()
 
     def test_empty_request(self):
         _, code = self.get_response({})
@@ -99,34 +99,41 @@ class TestSuite(unittest.TestCase):
         self.assertEqual(api.INVALID_REQUEST, code, arguments)
         self.assertTrue(len(response))
 
-    # fmt: off
-    # @cases([
-    #     {"phone": "79175002040", "email": "stupnikov@otus.ru"},
-    #     {"phone": 79175002040, "email": "stupnikov@otus.ru"},
-    #     {"gender": 1, "birthday": "01.01.2000", "first_name": "a", "last_name": "b"},
-    #     {"gender": 0, "birthday": "01.01.2000"},
-    #     {"gender": 2, "birthday": "01.01.2000"},
-    #     {"first_name": "a", "last_name": "b"},
-    #     {"phone": "79175002040", "email": "stupnikov@otus.ru", "gender": 1, "birthday": "01.01.2000",
-    #      "first_name": "a", "last_name": "b"},
-    # ])
-    # def test_ok_score_request(self, arguments):
-    #     request = {"account": "horns&hoofs", "login": "h&f", "method": "online_score", "arguments": arguments}
-    #     self.set_valid_auth(request)
-    #     response, code = self.get_response(request)
-    #     self.assertEqual(api.OK, code, arguments)
-    #     score = response.get("score")
-    #     self.assertTrue(isinstance(score, (int, float)) and score >= 0, arguments)
-    #     self.assertEqual(sorted(self.context["has"]), sorted(arguments.keys()))
+    @cases(
+        [
+            {"phone": "79175002040", "email": "stupnikov@otus.ru"},
+            {"phone": 79175002040, "email": "stupnikov@otus.ru"},
+            {"gender": 1, "birthday": "01.01.2000", "first_name": "a", "last_name": "b"},
+            {"gender": 0, "birthday": "01.01.2000"},
+            {"gender": 2, "birthday": "01.01.2000"},
+            {"first_name": "a", "last_name": "b"},
+            {
+                "phone": "79175002040",
+                "email": "stupnikov@otus.ru",
+                "gender": 1,
+                "birthday": "01.01.2000",
+                "first_name": "a",
+                "last_name": "b",
+            },
+        ]
+    )
+    def test_ok_score_request(self, arguments):
+        request = {"account": "horns&hoofs", "login": "h&f", "method": "online_score", "arguments": arguments}
+        self.set_valid_auth(request)
+        response, code = self.get_response(request)
+        self.assertEqual(api.OK, code, arguments)
+        score = response.get("score")
+        self.assertTrue(isinstance(score, (int, float)) and score >= 0, arguments)
+        self.assertEqual(sorted(self.context["has"]), sorted(arguments.keys()))
 
-    # def test_ok_score_admin_request(self):
-    #     arguments = {"phone": "79175002040", "email": "stupnikov@otus.ru"}
-    #     request = {"account": "horns&hoofs", "login": "admin", "method": "online_score", "arguments": arguments}
-    #     self.set_valid_auth(request)
-    #     response, code = self.get_response(request)
-    #     self.assertEqual(api.OK, code)
-    #     score = response.get("score")
-    #     self.assertEqual(score, 42)
+    def test_ok_score_admin_request(self):
+        arguments = {"phone": "79175002040", "email": "stupnikov@otus.ru"}
+        request = {"account": "horns&hoofs", "login": "admin", "method": "online_score", "arguments": arguments}
+        self.set_valid_auth(request)
+        response, code = self.get_response(request)
+        self.assertEqual(api.OK, code)
+        score = response.get("score")
+        self.assertEqual(score, 42)
 
     # @cases([
     #     {},
@@ -157,7 +164,6 @@ class TestSuite(unittest.TestCase):
     #     self.assertTrue(all(v and isinstance(v, list) and all(isinstance(i, (bytes, str)) for i in v)
     #                     for v in response.values()))
     #     self.assertEqual(self.context.get("nclients"), len(arguments["client_ids"]))
-    # fmt: on
 
 
 if __name__ == "__main__":

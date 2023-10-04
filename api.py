@@ -318,7 +318,7 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
             }
         context.update(r)
         logging.info(context)
-        self.wfile.write(json.dumps(r))
+        self.wfile.write(json.dumps(r).encode())
         return
 
 
